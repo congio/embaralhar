@@ -360,36 +360,130 @@
     }
   }
 
+  // Cria uma playlist com as músicas na ordem dada (primeiras 100 na criação, o resto em lotes)
+  async function createPlaylistFrom(ids, name, privacy, description) {
+    setProgress(`Cópia: 0/${ids.length}`);
+    const first = ids.slice(0, 100);
+    const resp = await api('playlist/create', {
+      title: name.slice(0, 150),
+      description,
+      privacyStatus: privacy,
+      videoIds: first,
+    });
+    const newId = resp.playlistId;
+    if (!newId) throw new Error('O YouTube Music não criou a playlist. [diag: playlist/create sem ID]');
+
+    let done = first.length;
+    setProgress(`Cópia: ${done}/${ids.length}`);
+    for (let i = 100; i < ids.length; i += 100) {
+      await addToPlaylist(newId, ids.slice(i, i + 100));
+      done = Math.min(i + 100, ids.length);
+      setProgress(`Cópia: ${done}/${ids.length}`);
+    }
+    log(`playlist criada: ${newId}`);
+    return newId;
+  }
+
   async function createShuffledCopy(sourceId, sourceTitle, name, privacy) {
     setBusy(true);
     try {
       setProgress('Carregando...');
       const vids = await prefetch(sourceId);
       if (!vids.length) throw new Error('Essa playlist não tem músicas disponíveis pra copiar.');
-      const ids = shuffle(vids);
-
-      setProgress(`Cópia: 0/${ids.length}`);
-      const first = ids.slice(0, 100);
-      const resp = await api('playlist/create', {
-        title: name.slice(0, 150),
-        description: `Cópia embaralhada de "${sourceTitle}", criada pelo ${NAME}.`,
-        privacyStatus: privacy,
-        videoIds: first,
-      });
-      const newId = resp.playlistId;
-      if (!newId) throw new Error('O YouTube Music não criou a playlist. [diag: playlist/create sem ID]');
-
-      let done = first.length;
-      setProgress(`Cópia: ${done}/${ids.length}`);
-      for (let i = 100; i < ids.length; i += 100) {
-        await addToPlaylist(newId, ids.slice(i, i + 100));
-        done = Math.min(i + 100, ids.length);
-        setProgress(`Cópia: ${done}/${ids.length}`);
-      }
-
-      log(`cópia criada: ${newId}`);
+      const newId = await createPlaylistFrom(shuffle(vids), name, privacy, `Cópia embaralhada de "${sourceTitle}", criada pelo ${NAME}.`);
       setBusy(false);
       toast(`"${name}" criada com as músicas embaralhadas.`, { href: `/playlist?list=${newId}`, label: 'Abrir' });
+    } catch (e) {
+      setBusy(false);
+      fail(e);
+    }
+  }
+
+  // Fila ("A seguir")
+  function queueState() {
+    const store = findStore();
+    if (!store) return null;
+    try {
+      const q = store.getState().queue;
+      return q && Array.isArray(q.items) ? { store, q } : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // IDs das músicas da fila, na ordem em que estão, sem repetição
+  function queueVideoIds() {
+    const st = queueState();
+    if (!st) return [];
+    const ids = [];
+    for (const it of st.q.items) {
+      const id = itemVideoId(it).id;
+      if (id && !ids.includes(id)) ids.push(id);
+    }
+    return ids;
+  }
+
+  // Embaralha a fila: a música atual fica no topo e todas as outras vêm depois, sorteadas
+  async function shuffleQueue() {
+    const st = queueState();
+    if (!st) throw new Error('Não achei a fila do YouTube Music. [diag: store]');
+    const { store, q } = st;
+    const items = q.items.slice();
+    if (items.length < 2) throw new Error('A fila precisa ter pelo menos duas músicas pra embaralhar.');
+
+    setBusy(true);
+    try {
+      setProgress('Embaralhando a fila...');
+      let cur = items.findIndex((it) => itemVideoId(it).selected);
+      if (cur === -1) cur = 0;
+      const current = items[cur];
+      const curId = itemVideoId(current).id;
+      const newOrder = [current, ...shuffle(items.filter((_, i) => i !== cur))];
+
+      // guarda onde a música atual está, pra voltar nesse ponto se o player reiniciar
+      const media = document.querySelector('video');
+      const pos = media ? media.currentTime : 0;
+      const wasPlaying = media ? !media.paused : false;
+
+      const replace = (list, assignIds) => {
+        store.dispatch({ type: 'CLEAR' });
+        store.dispatch({
+          type: 'ADD_ITEMS',
+          payload: { nextQueueItemId: store.getState().queue.nextQueueItemId, index: 0, items: list, shuffleEnabled: false, shouldAssignIds: assignIds },
+        });
+        return store.getState().queue.items.length;
+      };
+
+      // primeiro mantém os mesmos identificadores dos itens (menos chance de o player reiniciar)
+      let after = replace(newOrder, false);
+      if (after !== items.length) after = replace(newOrder, true);
+      if (after !== items.length) {
+        replace(items, false); // devolve a fila como estava
+        throw new Error(`O YouTube Music não aceitou a fila embaralhada. [diag: antes=${items.length} depois=${after}]`);
+      }
+
+      await sleep(800);
+      const m = document.querySelector('video');
+      if (m && currentVideoId() === curId && pos > 2 && m.currentTime < pos - 2) {
+        log('o player reiniciou a música atual, voltando pra onde estava');
+        m.currentTime = pos;
+        if (wasPlaying && m.paused) m.play().catch(() => {});
+      }
+
+      setBusy(false);
+      toast(`Fila embaralhada: ${after} músicas.`);
+    } catch (e) {
+      setBusy(false);
+      fail(e);
+    }
+  }
+
+  async function createPlaylistFromQueue(ids, name, privacy) {
+    setBusy(true);
+    try {
+      const newId = await createPlaylistFrom(ids, name, privacy, `Fila salva pelo ${NAME}.`);
+      setBusy(false);
+      toast(`"${name}" criada com as músicas da fila.`, { href: `/playlist?list=${newId}`, label: 'Abrir' });
     } catch (e) {
       setBusy(false);
       fail(e);
@@ -497,13 +591,19 @@
       hover(b, { background: '#4a4a4a' }, { background: 'none' });
       return b;
     };
+    const menuSep = el('div', { 'aria-hidden': 'true', style: { height: '1px', background: 'rgba(255,255,255,.12)', margin: '6px 0' } });
     const menu = el('div', {
       role: 'menu',
       style: {
         display: 'none', flexDirection: 'column', width: '232px', background: '#282828', borderRadius: '8px',
         padding: '6px 0', boxShadow: '0 6px 20px rgba(0,0,0,.6)', pointerEvents: 'auto', boxSizing: 'border-box',
       },
-    }, menuItem('play', icon('shuffle', 20), 'Embaralhar'), menuItem('copy', icon('copy', 20), 'Salvar cópia embaralhada'));
+    },
+      menuItem('play', icon('shuffle', 20), 'Embaralhar'),
+      menuItem('copy', icon('copy', 20), 'Salvar cópia embaralhada'),
+      menuSep,
+      menuItem('qshuffle', icon('shuffle', 20), 'Embaralhar a fila'),
+      menuItem('qsave', icon('copy', 20), 'Salvar fila como playlist'));
 
     // Linha da bolinha
     const progress = el('span', {
@@ -578,11 +678,18 @@
     const spin = reduce ? null : ring.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], { duration: 1000, iterations: Infinity });
     if (spin) spin.pause();
 
-    return { root, ball, ring, spin, menu, tip, toastEl, toastMsg, progress };
+    return { root, ball, ring, spin, menu, menuSep, tip, toastEl, toastMsg, progress };
   }
 
   function setMenu(open) {
     if (!ui) return;
+    if (open) {
+      const onPlaylist = !!currentPlaylistId();
+      const queueSize = queueVideoIds().length;
+      const vis = { play: onPlaylist, copy: onPlaylist, qshuffle: queueSize >= 2, qsave: queueSize >= 1 };
+      ui.menu.querySelectorAll('button[data-cmd]').forEach((b) => show(b, vis[b.dataset.cmd]));
+      show(ui.menuSep, onPlaylist && queueSize >= 1, 'block');
+    }
     show(ui.menu, open);
     ui.ball.setAttribute('aria-expanded', String(open));
   }
@@ -630,10 +737,15 @@
   }
 
   // Janela de nome da cópia
-  function openCopyDialog() {
-    const sourceId = currentPlaylistId();
-    if (!sourceId || busy || document.getElementById('edv-modal')) return;
-    const sourceTitle = currentPlaylistTitle();
+  // mode 'playlist': cópia embaralhada da playlist aberta; mode 'queue': playlist com a fila atual
+  function openCopyDialog(mode = 'playlist') {
+    if (busy || document.getElementById('edv-modal')) return;
+    const fromQueue = mode === 'queue';
+    const sourceId = fromQueue ? null : currentPlaylistId();
+    const queueIds = fromQueue ? queueVideoIds() : null;
+    if (fromQueue ? !queueIds.length : !sourceId) return;
+    const sourceTitle = fromQueue ? '' : currentPlaylistTitle();
+    const heading = fromQueue ? 'Salvar fila como playlist' : 'Salvar cópia embaralhada';
 
     const label = (text) => el('span', { style: { fontSize: '12px', color: '#aaa' } }, text);
     const input = el('input', {
@@ -664,16 +776,18 @@
     const createBtn = actionBtn('Criar', true, 'submit');
 
     const text = el('p', { style: { margin: '0', fontSize: '14px', color: '#aaa', lineHeight: '1.5' } },
-      'Cria uma playlist nova com as músicas disponíveis numa ordem sorteada. A playlist original continua igual.');
+      fromQueue
+        ? `Cria uma playlist nova com as ${queueIds.length} músicas da fila, na ordem em que estão. A fila continua igual.`
+        : 'Cria uma playlist nova com as músicas disponíveis numa ordem sorteada. A playlist original continua igual.');
 
     const form = el('form', {
-      role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Salvar cópia embaralhada',
+      role: 'dialog', 'aria-modal': 'true', 'aria-label': heading,
       style: {
         width: '100%', maxWidth: '400px', background: '#282828', color: '#fff', borderRadius: '12px', padding: '24px',
         display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 8px 32px rgba(0,0,0,.6)', boxSizing: 'border-box', fontFamily: FONT,
       },
     },
-      el('h2', { style: { margin: '0', fontSize: '20px', fontWeight: '500', color: '#fff' } }, 'Salvar cópia embaralhada'),
+      el('h2', { style: { margin: '0', fontSize: '20px', fontWeight: '500', color: '#fff' } }, heading),
       text,
       el('label', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } }, label('Nome'), input),
       el('div', { role: 'radiogroup', 'aria-label': 'Quem pode ver', style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
@@ -694,16 +808,17 @@
     }, form);
     document.body.appendChild(modal);
 
-    input.value = `${sourceTitle} (embaralhada)`;
+    input.value = fromQueue ? `Fila de ${new Date().toLocaleDateString('pt-BR')}` : `${sourceTitle} (embaralhada)`;
     input.focus();
     input.select();
 
     // Mostra quantas músicas vão entrar, quando a leitura terminar
-    prefetch(sourceId)
-      .then((vids) => {
-        text.textContent = `Cria uma playlist nova com as ${vids.length} músicas disponíveis numa ordem sorteada. A playlist original continua igual.`;
-      })
-      .catch(() => {});
+    if (!fromQueue)
+      prefetch(sourceId)
+        .then((vids) => {
+          text.textContent = `Cria uma playlist nova com as ${vids.length} músicas disponíveis numa ordem sorteada. A playlist original continua igual.`;
+        })
+        .catch(() => {});
 
     const close = () => modal.remove();
 
@@ -729,15 +844,18 @@
       const checked = form.querySelector('input[name="privacy"]:checked');
       const privacy = (checked && checked.value) || 'PRIVATE';
       close();
-      createShuffledCopy(sourceId, sourceTitle, name, privacy);
+      if (fromQueue) createPlaylistFromQueue(queueIds, name, privacy);
+      else createShuffledCopy(sourceId, sourceTitle, name, privacy);
     });
   }
 
   // Comandos da bolinha
   function run(cmd) {
-    if (!isEnabled() || !currentPlaylistId() || busy) return;
-    if (cmd === 'play') playShuffled();
-    else if (cmd === 'copy') openCopyDialog();
+    if (!isEnabled() || busy) return;
+    if (cmd === 'play' && currentPlaylistId()) playShuffled();
+    else if (cmd === 'copy' && currentPlaylistId()) openCopyDialog('playlist');
+    else if (cmd === 'qshuffle') shuffleQueue().catch(fail);
+    else if (cmd === 'qsave') openCopyDialog('queue');
   }
 
 
@@ -777,7 +895,7 @@
     if (!ui) ui = buildUi();
     if (pid && shouldPrefetch(pid)) prefetch(pid).catch((e) => log('leitura da playlist falhou:', e.message));
 
-    const showBall = !!pid;
+    const showBall = !!pid || queueVideoIds().length > 0;
     show(ui.ball, showBall || busy);
     if (!showBall) setMenu(false);
     const toastOpen = ui.toastEl.style.display !== 'none';

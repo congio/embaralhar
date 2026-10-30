@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## 1.1.0 — 2026-10-30
+
+- Embaralhar a fila: sorteia a ordem do "A seguir" que já está tocando, mantendo a música atual no topo.
+- Salvar fila como playlist: cria uma playlist nova com as músicas da fila, na ordem em que estão, com nome e visibilidade à escolha.
+- A bolinha também aparece fora das páginas de playlist quando há uma fila tocando.
+
 ## 1.0.0 — 2026-10-30
 
 Primeira versão.

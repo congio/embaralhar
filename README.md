@@ -19,6 +19,8 @@ O aleatório do YouTube Music não toca a playlist inteira. Ao apertar o botão 
 
 - **Embaralhar:** lê a playlist inteira, sorteia a ordem, começa a tocar na hora e coloca **todas** as outras músicas no "A seguir". Depois disso é o próprio YouTube Music que toca: próxima, anterior e a fila funcionam normalmente.
 - **Salvar cópia embaralhada:** faz o mesmo sorteio, mas em vez de tocar cria uma playlist nova com o nome que você escolher, privada, não listada ou pública.
+- **Embaralhar a fila:** embaralha o "A seguir" que já está tocando. A música atual continua tocando e todas as outras vêm depois, numa ordem sorteada.
+- **Salvar fila como playlist:** cria uma playlist nova com as músicas da fila, na ordem em que estão.
 - **A playlist original nunca é alterada.**
 - Funciona com qualquer playlist: as suas, as de outras pessoas e Músicas curtidas.
 - Músicas indisponíveis e repetidas ficam de fora.
@@ -50,6 +52,8 @@ Se a página do YouTube Music já estava aberta, recarregue ela depois de instal
 
 Para guardar uma ordem sorteada, use **Salvar cópia embaralhada**: escolha o nome e quem pode ver, e a playlist nova é criada na sua conta.
 
+Com música tocando, a bolinha também aparece fora das páginas de playlist. No menu dela, **Embaralhar a fila** sorteia a ordem do "A seguir" e **Salvar fila como playlist** guarda a fila numa playlist nova.
+
 > Depois de embaralhar, não aperte o aleatório do próprio YouTube Music. Ele corta a fila de novo.
 
 ### Janela da extensão
@@ -67,6 +71,8 @@ A extensão roda só em `music.youtube.com` e usa a sua sessão já logada no si
 2. Sorteia a ordem com `crypto.getRandomValues` (embaralhamento de Fisher-Yates), então cada ordem possível tem a mesma chance.
 3. **Embaralhar:** toca a primeira música sorteada e insere as outras no "A seguir" logo depois dela.
    **Salvar cópia:** cria uma playlist nova e adiciona as músicas na ordem sorteada.
+4. **Embaralhar a fila:** lê o "A seguir", mantém a música atual no topo e coloca as outras numa ordem sorteada.
+   **Salvar fila como playlist:** cria uma playlist nova com as músicas da fila, na ordem em que estão.
 
 | Arquivo | Função |
 | --- | --- |

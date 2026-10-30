@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Embaralhar de Verdade",
   "short_name": "Embaralhar",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Toca playlists do YouTube Music inteiras e embaralhadas de verdade, sem cortar músicas e sem alterar a playlist original.",
   "author": "Congio",
   "homepage_url": "https://github.com/congio/embaralhar",
