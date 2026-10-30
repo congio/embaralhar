@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Embaralhar de Verdade</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="head">
+    <img src="icons/48.png" width="36" height="36" alt="">
+    <div>
+      <b>Embaralhar de Verdade</b>
+      <small>Aleatório que toca a playlist inteira</small>
+    </div>
+  </header>
+
+  <div class="rows">
+    <div class="row">
+      <span id="opt-enabled-label">Extensão ligada</span>
+      <span id="opt-enabled" class="switch" role="switch" tabindex="0" aria-checked="true" aria-labelledby="opt-enabled-label"></span>
+    </div>
+  </div>
+
+  <main class="body">
+    <div>
+      <h4 id="theme-label">Tema desta janela</h4>
+      <div class="seg" role="radiogroup" aria-labelledby="theme-label">
+        <button type="button" role="radio" data-theme-opt="auto">Automático</button>
+        <button type="button" role="radio" data-theme-opt="light">Claro</button>
+        <button type="button" role="radio" data-theme-opt="dark">Escuro</button>
+      </div>
+    </div>
+    <div>
+      <h4>Como usar</h4>
+      <ol>
+        <li>Abra uma playlist no music.youtube.com.</li>
+        <li>Clique em <b>Embaralhar</b>.</li>
+        <li>A música começa na hora e o "A seguir" recebe a playlist inteira embaralhada.</li>
+      </ol>
+    </div>
+    <div>
+      <h4>Bom saber</h4>
+      <ul>
+        <li>A playlist original nunca é alterada.</li>
+        <li><b>Salvar cópia</b> cria uma playlist nova embaralhada, com o nome que você escolher.</li>
+        <li>Músicas indisponíveis e repetidas ficam de fora.</li>
+        <li>Depois de embaralhar, não use o aleatório do YouTube Music: ele corta a fila de novo.</li>
+      </ul>
+    </div>
+  </main>
+
+  <footer class="foot">
+    <span>Versão <span id="version"></span></span>
+    <span>por <a href="https://github.com/congio/embaralhar" target="_blank" rel="noopener">Congio</a></span>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
