@@ -22,6 +22,22 @@
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const log = (...a) => console.log(`[${NAME}]`, ...a);
 
+  // Textos da tela no idioma do navegador. Vêm da pasta _locales, passados pela ponte (bridge.js).
+  // t('chave', { nome: valor }) troca {nome} pelo valor.
+  let STR = null;
+  function t(key, vars = {}) {
+    if (!STR) {
+      try {
+        const parsed = JSON.parse(document.documentElement.dataset.edvStrings || '{}');
+        if (Object.keys(parsed).length) STR = parsed;
+      } catch (e) {}
+    }
+    let s = (STR && STR[key]) || key;
+    for (const [k, v] of Object.entries(vars)) s = s.split(`{${k}}`).join(String(v));
+    return s;
+  }
+  const locale = () => document.documentElement.dataset.edvLocale || navigator.language;
+
   function getCookie(name) {
     const safe = name.replace(/[.$?*|{}()[\]\\/+^]/g, '\\$&');
     const m = document.cookie.match(new RegExp('(?:^|; )' + safe + '=([^;]*)'));
@@ -46,7 +62,7 @@
     for (const [label, value] of sources) {
       if (value) parts.push(`${label} ${ts}_${await sha1(`${ts} ${value} ${origin}`)}`);
     }
-    if (!parts.length) throw new Error('Não encontrei sua sessão. Entre na sua conta do YouTube Music e tente de novo.');
+    if (!parts.length) throw new Error(t('errNoSession'));
     return parts.join(' ');
   }
 
@@ -70,7 +86,7 @@
       headers,
       body: JSON.stringify({ context: cfg('INNERTUBE_CONTEXT'), ...body }),
     });
-    if (!res.ok) throw new Error(`O YouTube Music respondeu com erro ${res.status} (${endpoint}).`);
+    if (!res.ok) throw new Error(t('errHttp', { status: res.status, endpoint }));
     return res.json();
   }
 
@@ -278,9 +294,9 @@
     if (!playlistId || busy) return;
     setBusy(true);
     try {
-      setProgress('Carregando...');
+      setProgress(t('progressLoading'));
       const vids = await prefetch(playlistId); // normalmente já está pronto
-      if (vids.length < 2) throw new Error('Essa playlist não tem músicas disponíveis suficientes pra embaralhar.');
+      if (vids.length < 2) throw new Error(t('errNotEnoughToShuffle'));
       const ids = shuffle(vids);
 
       // Começa a música na hora (tenta a próxima se a sorteada não tocar)
@@ -292,7 +308,7 @@
         }
         log('não começou a tocar, tentando outra', ids[i]);
       }
-      if (first === -1) throw new Error('O YouTube Music não começou a tocar. Recarregue a página e tente de novo.');
+      if (first === -1) throw new Error(t('errNotPlaying'));
       const rest = ids.slice(first + 1);
 
       // Acha a fila e a posição da música atual
@@ -301,7 +317,7 @@
         store = findStore();
         if (!store) await sleep(200);
       }
-      if (!store) throw new Error('Não achei a fila do YouTube Music. [diag: store]');
+      if (!store) throw new Error(t('errNoQueue'));
 
       let state = store.getState().queue;
       for (let t = 0; t < 4000; t += 200) {
@@ -326,14 +342,14 @@
           payload: { nextQueueItemId: s.nextQueueItemId, index: insertAt, items, shuffleEnabled: false, shouldAssignIds: true },
         });
         const grew = store.getState().queue.items.length - before;
-        if (grew <= 0) throw new Error(`O YouTube Music não aceitou as músicas na fila. [diag: lote ${i / 50}]`);
+        if (grew <= 0) throw new Error(t('errQueueRejected', { batch: i / 50 }));
         insertAt += grew;
         added += grew;
-        setProgress(`Fila: ${added + 1}/${ids.length - first}`);
+        setProgress(t('progressQueue', { done: added + 1, total: ids.length - first }));
       }
       log(`fila pronta: ${added + 1} músicas`);
       setBusy(false);
-      toast(`Tocando ${added + 1} músicas embaralhadas.`);
+      toast(t('toastPlaying', { count: added + 1 }));
     } catch (e) {
       setBusy(false);
       fail(e);
@@ -362,7 +378,7 @@
 
   // Cria uma playlist com as músicas na ordem dada (primeiras 100 na criação, o resto em lotes)
   async function createPlaylistFrom(ids, name, privacy, description) {
-    setProgress(`Cópia: 0/${ids.length}`);
+    setProgress(t('progressCopy', { done: 0, total: ids.length }));
     const first = ids.slice(0, 100);
     const resp = await api('playlist/create', {
       title: name.slice(0, 150),
@@ -371,14 +387,14 @@
       videoIds: first,
     });
     const newId = resp.playlistId;
-    if (!newId) throw new Error('O YouTube Music não criou a playlist. [diag: playlist/create sem ID]');
+    if (!newId) throw new Error(t('errNotCreated'));
 
     let done = first.length;
-    setProgress(`Cópia: ${done}/${ids.length}`);
+    setProgress(t('progressCopy', { done, total: ids.length }));
     for (let i = 100; i < ids.length; i += 100) {
       await addToPlaylist(newId, ids.slice(i, i + 100));
       done = Math.min(i + 100, ids.length);
-      setProgress(`Cópia: ${done}/${ids.length}`);
+      setProgress(t('progressCopy', { done, total: ids.length }));
     }
     log(`playlist criada: ${newId}`);
     return newId;
@@ -387,12 +403,12 @@
   async function createShuffledCopy(sourceId, sourceTitle, name, privacy) {
     setBusy(true);
     try {
-      setProgress('Carregando...');
+      setProgress(t('progressLoading'));
       const vids = await prefetch(sourceId);
-      if (!vids.length) throw new Error('Essa playlist não tem músicas disponíveis pra copiar.');
-      const newId = await createPlaylistFrom(shuffle(vids), name, privacy, `Cópia embaralhada de "${sourceTitle}", criada pelo ${NAME}.`);
+      if (!vids.length) throw new Error(t('errNoSongsToCopy'));
+      const newId = await createPlaylistFrom(shuffle(vids), name, privacy, t('descCopy', { title: sourceTitle, name: NAME }));
       setBusy(false);
-      toast(`"${name}" criada com as músicas embaralhadas.`, { href: `/playlist?list=${newId}`, label: 'Abrir' });
+      toast(t('toastCopyCreated', { name }), { href: `/playlist?list=${newId}`, label: t('open') });
     } catch (e) {
       setBusy(false);
       fail(e);
@@ -426,14 +442,14 @@
   // Embaralha a fila: a música atual fica no topo e todas as outras vêm depois, sorteadas
   async function shuffleQueue() {
     const st = queueState();
-    if (!st) throw new Error('Não achei a fila do YouTube Music. [diag: store]');
+    if (!st) throw new Error(t('errNoQueue'));
     const { store, q } = st;
     const items = q.items.slice();
-    if (items.length < 2) throw new Error('A fila precisa ter pelo menos duas músicas pra embaralhar.');
+    if (items.length < 2) throw new Error(t('errQueueTooSmall'));
 
     setBusy(true);
     try {
-      setProgress('Embaralhando a fila...');
+      setProgress(t('progressShufflingQueue'));
       let cur = items.findIndex((it) => itemVideoId(it).selected);
       if (cur === -1) cur = 0;
       const current = items[cur];
@@ -459,7 +475,7 @@
       if (after !== items.length) after = replace(newOrder, true);
       if (after !== items.length) {
         replace(items, false); // devolve a fila como estava
-        throw new Error(`O YouTube Music não aceitou a fila embaralhada. [diag: antes=${items.length} depois=${after}]`);
+        throw new Error(t('errQueueShuffleRejected', { before: items.length, after }));
       }
 
       await sleep(800);
@@ -471,7 +487,7 @@
       }
 
       setBusy(false);
-      toast(`Fila embaralhada: ${after} músicas.`);
+      toast(t('toastQueueShuffled', { count: after }));
     } catch (e) {
       setBusy(false);
       fail(e);
@@ -481,9 +497,9 @@
   async function createPlaylistFromQueue(ids, name, privacy) {
     setBusy(true);
     try {
-      const newId = await createPlaylistFrom(ids, name, privacy, `Fila salva pelo ${NAME}.`);
+      const newId = await createPlaylistFrom(ids, name, privacy, t('descQueue', { name: NAME }));
       setBusy(false);
-      toast(`"${name}" criada com as músicas da fila.`, { href: `/playlist?list=${newId}`, label: 'Abrir' });
+      toast(t('toastQueueSaved', { name }), { href: `/playlist?list=${newId}`, label: t('open') });
     } catch (e) {
       setBusy(false);
       fail(e);
@@ -566,7 +582,7 @@
 
     // Aviso (sucesso ou erro)
     const toastMsg = el('span', { style: { flex: '1', minWidth: '0', paddingTop: '2px', overflowWrap: 'anywhere' } });
-    const toastClose = el('button', { type: 'button', 'aria-label': 'Fechar', style: { ...BTN, color: '#aaa', display: 'flex', padding: '2px', borderRadius: '50%' } }, icon('close', 16));
+    const toastClose = el('button', { type: 'button', 'aria-label': t('close'), style: { ...BTN, color: '#aaa', display: 'flex', padding: '2px', borderRadius: '50%' } }, icon('close', 16));
     hover(toastClose, { color: '#fff' }, { color: '#aaa' });
     const toastEl = el('div', {
       role: 'status',
@@ -599,11 +615,11 @@
         padding: '6px 0', boxShadow: '0 6px 20px rgba(0,0,0,.6)', pointerEvents: 'auto', boxSizing: 'border-box',
       },
     },
-      menuItem('play', icon('shuffle', 20), 'Embaralhar'),
-      menuItem('copy', icon('copy', 20), 'Salvar cópia embaralhada'),
+      menuItem('play', icon('shuffle', 20), t('menuShuffle')),
+      menuItem('copy', icon('copy', 20), t('menuCopy')),
       menuSep,
-      menuItem('qshuffle', icon('shuffle', 20), 'Embaralhar a fila'),
-      menuItem('qsave', icon('copy', 20), 'Salvar fila como playlist'));
+      menuItem('qshuffle', icon('shuffle', 20), t('menuShuffleQueue')),
+      menuItem('qsave', icon('copy', 20), t('menuSaveQueue')));
 
     // Linha da bolinha
     const progress = el('span', {
@@ -718,7 +734,7 @@
     if (!ui) return;
     ui.toastMsg.textContent = message;
     if (opts.href) {
-      const a = el('a', { href: opts.href, style: { color: '#ff8a8e', fontWeight: '500', textDecoration: 'none', marginLeft: '6px' } }, opts.label || 'Abrir');
+      const a = el('a', { href: opts.href, style: { color: '#ff8a8e', fontWeight: '500', textDecoration: 'none', marginLeft: '6px' } }, opts.label || t('open'));
       ui.toastMsg.appendChild(a);
     }
     ui.toastEl.style.borderLeft = '3px solid #ff4a52';
@@ -745,7 +761,7 @@
     const queueIds = fromQueue ? queueVideoIds() : null;
     if (fromQueue ? !queueIds.length : !sourceId) return;
     const sourceTitle = fromQueue ? '' : currentPlaylistTitle();
-    const heading = fromQueue ? 'Salvar fila como playlist' : 'Salvar cópia embaralhada';
+    const heading = fromQueue ? t('menuSaveQueue') : t('menuCopy');
 
     const label = (text) => el('span', { style: { fontSize: '12px', color: '#aaa' } }, text);
     const input = el('input', {
@@ -772,13 +788,11 @@
       hover(b, solid ? { background: '#d6d6d6' } : { background: 'rgba(255,255,255,.16)' }, base);
       return b;
     };
-    const cancelBtn = actionBtn('Cancelar', false, 'button');
-    const createBtn = actionBtn('Criar', true, 'submit');
+    const cancelBtn = actionBtn(t('cancel'), false, 'button');
+    const createBtn = actionBtn(t('create'), true, 'submit');
 
     const text = el('p', { style: { margin: '0', fontSize: '14px', color: '#aaa', lineHeight: '1.5' } },
-      fromQueue
-        ? `Cria uma playlist nova com as ${queueIds.length} músicas da fila, na ordem em que estão. A fila continua igual.`
-        : 'Cria uma playlist nova com as músicas disponíveis numa ordem sorteada. A playlist original continua igual.');
+      fromQueue ? t('dialogQueueText', { count: queueIds.length }) : t('dialogCopyText'));
 
     const form = el('form', {
       role: 'dialog', 'aria-modal': 'true', 'aria-label': heading,
@@ -789,13 +803,13 @@
     },
       el('h2', { style: { margin: '0', fontSize: '20px', fontWeight: '500', color: '#fff' } }, heading),
       text,
-      el('label', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } }, label('Nome'), input),
-      el('div', { role: 'radiogroup', 'aria-label': 'Quem pode ver', style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
-        label('Quem pode ver'),
+      el('label', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } }, label(t('fieldName')), input),
+      el('div', { role: 'radiogroup', 'aria-label': t('fieldWho'), style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+        label(t('fieldWho')),
         el('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px 18px' } },
-          radio('edv-priv-private', 'PRIVATE', 'Privada', true),
-          radio('edv-priv-unlisted', 'UNLISTED', 'Não listada', false),
-          radio('edv-priv-public', 'PUBLIC', 'Pública', false))),
+          radio('edv-priv-private', 'PRIVATE', t('privPrivate'), true),
+          radio('edv-priv-unlisted', 'UNLISTED', t('privUnlisted'), false),
+          radio('edv-priv-public', 'PUBLIC', t('privPublic'), false))),
       el('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' } }, cancelBtn, createBtn)
     );
 
@@ -808,7 +822,9 @@
     }, form);
     document.body.appendChild(modal);
 
-    input.value = fromQueue ? `Fila de ${new Date().toLocaleDateString('pt-BR')}` : `${sourceTitle} (embaralhada)`;
+    input.value = fromQueue
+      ? t('defaultQueueName', { date: new Date().toLocaleDateString(locale()) })
+      : t('defaultCopyName', { title: sourceTitle });
     input.focus();
     input.select();
 
@@ -816,7 +832,7 @@
     if (!fromQueue)
       prefetch(sourceId)
         .then((vids) => {
-          text.textContent = `Cria uma playlist nova com as ${vids.length} músicas disponíveis numa ordem sorteada. A playlist original continua igual.`;
+          text.textContent = t('dialogCopyTextCount', { count: vids.length });
         })
         .catch(() => {});
 

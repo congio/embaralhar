@@ -1,4 +1,8 @@
 <p align="center">
+  <b>Português</b> | <a href="README.en.md">English</a>
+</p>
+
+<p align="center">
   <img src="docs/icon.svg" width="96" height="96" alt="Ícone do Embaralhar de Verdade">
 </p>
 
@@ -25,6 +29,7 @@ O aleatório do YouTube Music não toca a playlist inteira. Ao apertar o botão 
 - Funciona com qualquer playlist: as suas, as de outras pessoas e Músicas curtidas.
 - Músicas indisponíveis e repetidas ficam de fora.
 - Aguenta playlists grandes: a música começa na hora e a fila é preenchida em lotes enquanto ela toca.
+- Em português ou inglês, conforme o idioma do navegador.
 
 ## Instalação
 
@@ -63,6 +68,10 @@ Clicando no ícone da extensão na barra do navegador:
 - **Extensão ligada:** liga e desliga a extensão. Desligada, ela some da página por completo.
 - **Tema desta janela:** Automático (segue o navegador), Claro ou Escuro.
 
+## Idioma
+
+A extensão mostra os textos em português quando o navegador está em português, e em inglês em qualquer outro idioma. Os textos ficam na pasta `extension/_locales`, um arquivo por idioma.
+
 ## Como funciona
 
 A extensão roda só em `music.youtube.com` e usa a sua sessão já logada no site, do mesmo jeito que a própria página faz:
@@ -77,8 +86,9 @@ A extensão roda só em `music.youtube.com` e usa a sua sessão já logada no si
 | Arquivo | Função |
 | --- | --- |
 | `extension/content.js` | Roda dentro da página: lê a playlist, embaralha, monta a fila, cria a cópia e desenha a bolinha. |
-| `extension/bridge.js` | Repassa pra página a chave de ativar da janela da extensão. |
+| `extension/bridge.js` | Repassa pra página a chave de ativar e os textos no idioma do navegador. |
 | `extension/popup.html`, `popup.css`, `popup.js` | Janela da extensão. |
+| `extension/_locales` | Textos em cada idioma. |
 | `extension/manifest.json` | Configuração da extensão. |
 
 ## Privacidade
@@ -94,7 +104,7 @@ A extensão roda só em `music.youtube.com` e usa a sua sessão já logada no si
 
 ## Publicar uma versão nova
 
-1. Suba o número de `version` em `extension/manifest.json` e registre a mudança no `CHANGELOG.md`.
+1. Suba o número de `version` em `extension/manifest.json` e registre a mudança no `CHANGELOG.md` e no `CHANGELOG.en.md`.
 2. Compacte a pasta `extension` renomeada para `embaralhar` (com a pasta dentro do zip) como `embaralhar-X.Y.Z-chrome.zip`.
 3. Crie uma release no GitHub com a tag `vX.Y.Z` e anexe o `embaralhar-X.Y.Z-chrome.zip`.
 

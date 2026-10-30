@@ -2,6 +2,17 @@
 
 const DEFAULTS = { enabled: true, theme: 'auto' };
 
+// Textos no idioma do navegador (pasta _locales)
+document.documentElement.lang = chrome.i18n.getUILanguage();
+document.querySelectorAll('[data-i18n]').forEach((el) => {
+  const text = chrome.i18n.getMessage(el.dataset.i18n);
+  if (text) el.textContent = text;
+});
+document.querySelectorAll('[data-i18n-html]').forEach((el) => {
+  const text = chrome.i18n.getMessage(el.dataset.i18nHtml);
+  if (text) el.innerHTML = text;
+});
+
 const enabledEl = document.querySelector('#opt-enabled');
 
 document.querySelector('#version').textContent = chrome.runtime.getManifest().version;

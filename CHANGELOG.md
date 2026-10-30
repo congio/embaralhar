@@ -1,4 +1,13 @@
+<p align="center">
+  <b>Português</b> | <a href="CHANGELOG.en.md">English</a>
+</p>
+
 # Histórico de versões
+
+## 1.2.0 — 2026-10-30
+
+- A extensão agora fala português e inglês: os textos da bolinha, do menu, dos avisos, da janela de cópia e da janela da extensão seguem o idioma do navegador.
+- Documentação em inglês: `README.en.md` e `CHANGELOG.en.md`.
 
 ## 1.1.0 — 2026-10-30
 
